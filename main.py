@@ -1,4 +1,6 @@
 import os
+
+
 import supervision as sv
 
 from scripts.utils.model_utils import ModelLoader
@@ -14,27 +16,24 @@ model_loader = ModelLoader(model_name="yolov8s.pt")
 images_directory = "C:/Images"
 image_directory_loader = ImageDirectoryLoader(directory=images_directory)
 
-print(f"Processing {len(image_directory_loader.image_names)} images from '{images_directory}'")
+print(f"Processing {len(image_directory_loader.image_paths)} images from '{images_directory}'")
 
-for i, image in enumerate(image_directory_loader.images):
-    result = model_loader.model(image)[0]
-    detections = sv.Detections.from_ultralytics(result)
+for i, ac_image in enumerate(image_directory_loader.images):
+    print(f"Processing {ac_image.file_path}...")
 
-    # Only grab people
-    person_class_id = 0
-    detections = detections[detections.class_id == person_class_id]
-    detections = detections[detections.confidence > 0.5]
-
-    original_file_name = image_directory_loader.image_names_without_ext[i]
-    original_file_ext = image_directory_loader.image_extensions[i]
-
-    print(f"Processing {original_file_name}{original_file_ext}...")
+    # run detection
+    persons_with_faces = ac_image.get_results(model_loader)
 
     with sv.ImageSink(target_dir_path=results_folder) as sink:
-        for person_index, xyxy in enumerate(detections.xyxy):
-            cropped_image = sv.crop(image=image.copy(), xyxy=xyxy)
-            sink.save_image(image=cropped_image, image_name=f"{original_file_name}_{person_index:02d}{original_file_ext}")
+        for person_index, person_with_face in enumerate(persons_with_faces):
+            person_xyxy, face_xyxy = person_with_face
 
+            # Center the image around the face detection for this item - TODO
+            person_image = sv.crop(image=ac_image.image.copy(), xyxy=person_xyxy)
+            sink.save_image(image=person_image, image_name=f"{ac_image.image_name_without_ext}_{person_index:02d}{ac_image.image_extension}")
+
+            face_image = sv.crop(image=ac_image.image.copy(), xyxy=face_xyxy)
+            sink.save_image(image=face_image, image_name=f"{ac_image.image_name_without_ext}_face_{person_index:02d}{ac_image.image_extension}")
 
 print("Complete")
 
