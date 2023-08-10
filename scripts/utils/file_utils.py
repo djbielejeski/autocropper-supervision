@@ -5,18 +5,19 @@ import math
 import supervision as sv
 
 from scripts.utils.model_utils import ModelLoader
-
+from scripts.utils.crop_utils import CropRatio
 
 class AutoCropperImage:
     person_detections = []
     face_detections = []
 
-    def __init__(self, file_path: str):
+    def __init__(self, file_path: str, crop_ratio=CropRatio(ratio=(3,4))):
         self.file_path = file_path
         self.image = cv2.imread(file_path)
         self.height, self.width, _ = self.image.shape
         self.image_name_without_ext, self.image_extension = os.path.splitext(os.path.basename(file_path))
         self.person_padding_percent = 0.01
+        self.crop_ratio = crop_ratio
 
     def get_results(self, model_loader: ModelLoader):
         self.person_detections = self._get_person_bounding_boxes(model_loader)
@@ -28,14 +29,59 @@ class AutoCropperImage:
         for i, person in enumerate(self.person_detections):
             for j, face in enumerate(self.face_detections):
                 if self._xyxy_contains(person, face):
-                    persons_with_faces_bounding_boxes.append((person, face))
+                    centered_person = self._center(person, face)
+                    persons_with_faces_bounding_boxes.append((centered_person, face))
 
         print(f"Found {len(persons_with_faces_bounding_boxes)} people with faces")
 
-        # iterate over all of the persons with faces and do the crops
-        # TODO
-
         return persons_with_faces_bounding_boxes
+
+    def _center(self, person_xyxy, face_xyxy):
+        person_left, person_top, person_right, person_bottom = person_xyxy
+        person_height = person_bottom - person_top
+        person_width = person_right - person_left
+
+        # final output dimensions
+        # find nearest division of 64
+        output_width = output_height = 0
+        if person_height > person_width:
+            output_height = (person_height // 64) * 64
+            output_width = self.crop_ratio.width_over_height * output_height
+        else:
+            output_width = (person_width // 64) * 64
+            output_height = self.crop_ratio.height_over_width * output_width
+
+        # find the center of the face
+        face_left, face_top, face_right, face_bottom = face_xyxy
+        face_height = face_bottom - face_top
+        face_width = face_right - face_left
+
+        face_center_x = face_left + math.floor(face_width / 2)
+        face_center_y = face_top + math.floor(face_height / 2)
+
+        potential_left = face_center_x - (output_width / 2)
+        if potential_left < 0:
+            potential_left = 0
+
+        potential_right = potential_left + output_width
+
+        potential_top = face_center_y - (output_height / 2)
+        if potential_top < 0:
+            potential_top = 0
+
+        potential_bottom = potential_top + output_height
+
+        final_left, final_right = self._get_bounding_box_centered_on_face(potential_left, potential_right, person_left, person_right, self.width)
+        final_top, final_bottom = self._get_bounding_box_centered_on_face(potential_top, potential_bottom, person_top, person_bottom, self.height)
+
+        final_bounding_box = (final_left, final_top, final_right, final_bottom)
+
+        print(f"original person_xyxy bounding box: {person_xyxy}")
+
+        print(f"Saving a new image with {output_width}x{output_height}")
+        print(f"final_bounding_box: {final_bounding_box}")
+
+        return final_bounding_box
 
     def _get_person_bounding_boxes(self, model_loader: ModelLoader):
         result = model_loader.model(self.image)[0]
@@ -54,7 +100,7 @@ class AutoCropperImage:
     def _get_face_bounding_boxes(self, model_loader: ModelLoader):
         result_face = model_loader.face_model(self.image)[0]
         face_detections = sv.Detections.from_ultralytics(result_face)
-        face_detections = face_detections[face_detections.confidence > 0.5]
+        face_detections = face_detections[face_detections.confidence > 0.3]
         face_detections_xyxy = [self._standardize_xyxy(xyxy) for xyxy in face_detections.xyxy]
 
         return face_detections_xyxy
@@ -76,13 +122,48 @@ class AutoCropperImage:
     def _apply_padding(self, padding_percent, xyxy):
         left, top, right, bottom = xyxy  # [100, 100, 600, 700]
         padding = math.ceil((self.width if self.width > self.height else self.height) * padding_percent)
-        print(f"padding: {padding}")
         if padding > 0:
-            left -= padding if left > padding else 0
-            top -= padding if top > padding else 0
-            right += padding if right + padding <= self.width else self.width
-            bottom += padding if bottom + padding <= self.height else self.height
+            left = left - padding if left - padding > 0 else 0
+            top = top - padding if top - padding > 0 else 0
+            right = right + padding if right + padding <= self.width else self.width
+            bottom = bottom + padding if bottom + padding <= self.height else self.height
         return [left, top, right, bottom]
+
+    def _within_bounds_start(self, start, person_start):
+        return start >= 0 and start >= person_start
+
+    def _within_bounds_end(self, end, person_end, maximum):
+        return end <= maximum and end <= person_end
+
+    def _within_bounds(self, start, end, person_start, person_end, maximum):
+        return self._within_bounds_start(start, person_start) and self._within_bounds_end(end, person_end, maximum)
+
+    def _get_bounding_box_centered_on_face(self, start, end, person_start, person_end, maximum):
+        if start >= 0 and start >= person_start and end <= maximum and end <= person_end:
+            pass
+        else:
+            # Walk 1 pixel
+            shift = 1
+            if end > maximum or end > person_end:
+                # Walk 1 pixel backwards
+                shift = -1
+
+            iterations = 0
+            while not self._within_bounds(start, end, person_start, person_end, maximum) and iterations < maximum:
+                end += shift
+                start += shift
+
+                if start <= 0:
+                    start = 0
+                    iterations = maximum
+
+                if end == maximum:
+                    end = maximum
+                    iterations = maximum
+
+                iterations += 1
+
+        return (start, end)
 
 
 class ImageDirectoryLoader:
