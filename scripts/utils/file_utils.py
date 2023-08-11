@@ -7,11 +7,17 @@ import supervision as sv
 from scripts.utils.model_utils import ModelLoader
 from scripts.utils.crop_utils import CropRatio
 
+
 class AutoCropperImage:
     person_detections = []
     face_detections = []
 
-    def __init__(self, file_path: str, crop_ratio=CropRatio(ratio=(3, 4)), person_percent_detection_cutoff=0.075):
+    def __init__(
+            self,
+            file_path: str,
+            crop_ratio=CropRatio(ratio=(3, 4)),
+            person_percent_detection_cutoff=0.075
+    ):
         self.file_path = file_path
         self.crop_ratio = crop_ratio
         self.person_percent_detection_cutoff = person_percent_detection_cutoff
@@ -24,7 +30,6 @@ class AutoCropperImage:
         self.file_name = os.path.basename(file_path)
         self.file_name_without_ext, self.file_extension = os.path.splitext(self.file_name)
         self.person_padding_percent = 0.01
-
 
     def get_results(self, model_loader: ModelLoader):
         self.person_detections = self._get_person_bounding_boxes(model_loader)
@@ -78,8 +83,10 @@ class AutoCropperImage:
 
         potential_bottom = potential_top + output_height
 
-        final_left, final_right = self._get_bounding_box_centered_on_face(potential_left, potential_right, person_left, person_right, self.width)
-        final_top, final_bottom = self._get_bounding_box_centered_on_face(potential_top, potential_bottom, person_top, person_bottom, self.height)
+        final_left, final_right = self._get_bounding_box_centered_on_face(potential_left, potential_right, person_left,
+                                                                          person_right, self.width)
+        final_top, final_bottom = self._get_bounding_box_centered_on_face(potential_top, potential_bottom, person_top,
+                                                                          person_bottom, self.height)
 
         final_bounding_box = (final_left, final_top, final_right, final_bottom)
 
@@ -96,7 +103,8 @@ class AutoCropperImage:
         person_detections = person_detections[person_detections.area > self.min_person_area]
         person_detections_xyxy = [self._standardize_xyxy(xyxy) for xyxy in person_detections.xyxy]
         # apply our padding
-        person_detections_xyxy = [self._apply_padding(self.person_padding_percent, xyxy) for xyxy in person_detections_xyxy]
+        person_detections_xyxy = [self._apply_padding(self.person_padding_percent, xyxy) for xyxy in
+                                  person_detections_xyxy]
 
         return person_detections_xyxy
 
