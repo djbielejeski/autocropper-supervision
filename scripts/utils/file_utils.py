@@ -133,12 +133,14 @@ class AutoCropperImage:
 
     def _apply_padding(self, padding_percent, xyxy):
         left, top, right, bottom = xyxy  # [100, 100, 600, 700]
-        padding = math.ceil((self.width if self.width > self.height else self.height) * padding_percent)
+        width = right - left
+        height = bottom - top
+        padding = math.ceil((width if width > height else height) * padding_percent)
         if padding > 0:
             left = left - padding if left - padding > 0 else 0
             top = top - padding if top - padding > 0 else 0
-            right = right + padding if right + padding <= self.width else self.width
-            bottom = bottom + padding if bottom + padding <= self.height else self.height
+            right = right + padding if right + padding <= width else width
+            bottom = bottom + padding if bottom + padding <= height else height
         return [left, top, right, bottom]
 
     def _within_bounds_start(self, start, person_start):
