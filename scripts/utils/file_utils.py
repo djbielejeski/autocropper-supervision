@@ -16,11 +16,13 @@ class AutoCropperImage:
             self,
             file_path: str,
             crop_ratio=CropRatio(ratio=(3, 4)),
-            person_percent_detection_cutoff=0.075
+            person_percent_detection_cutoff=0.075,
+            person_padding_percent=0.02
     ):
         self.file_path = file_path
         self.crop_ratio = crop_ratio
         self.person_percent_detection_cutoff = person_percent_detection_cutoff
+        self.person_padding_percent = person_padding_percent
 
         self.image = cv2.imread(file_path)
         self.height, self.width, _ = self.image.shape
@@ -29,7 +31,6 @@ class AutoCropperImage:
 
         self.file_name = os.path.basename(file_path)
         self.file_name_without_ext, self.file_extension = os.path.splitext(self.file_name)
-        self.person_padding_percent = 0.01
 
     def get_results(self, model_loader: ModelLoader):
         self.person_detections = self._get_person_bounding_boxes(model_loader)
