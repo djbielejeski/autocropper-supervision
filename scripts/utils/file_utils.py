@@ -36,6 +36,13 @@ class AutoCropperImage:
         self.person_detections = self._get_person_bounding_boxes(model_loader)
         self.face_detections = self._get_face_bounding_boxes(model_loader)
 
+        def sort_bounding_box(bounding_box):
+            left, top, right, bottom = bounding_box
+            area = (right - left) * (bottom - top)
+            return area
+
+        self.face_detections.sort(key=sort_bounding_box, reverse=True)
+
         persons_with_faces_bounding_boxes = []
 
         # For each person check to see if we have a face detected
@@ -44,6 +51,7 @@ class AutoCropperImage:
                 if self._xyxy_contains(person, face):
                     centered_person = self._center(person, face)
                     persons_with_faces_bounding_boxes.append((centered_person, face))
+                    break  # only do one face per person
 
         print(f"Found {len(persons_with_faces_bounding_boxes)} people with faces")
 
@@ -139,8 +147,8 @@ class AutoCropperImage:
         if padding > 0:
             left = left - padding if left - padding > 0 else 0
             top = top - padding if top - padding > 0 else 0
-            right = right + padding if right + padding <= width else width
-            bottom = bottom + padding if bottom + padding <= height else height
+            right = right + padding if right + padding <= self.width else self.width
+            bottom = bottom + padding if bottom + padding <= self.height else self.height
         return [left, top, right, bottom]
 
     def _within_bounds_start(self, start, person_start):
