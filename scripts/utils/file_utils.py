@@ -11,13 +11,20 @@ class AutoCropperImage:
     person_detections = []
     face_detections = []
 
-    def __init__(self, file_path: str, crop_ratio=CropRatio(ratio=(3,4))):
+    def __init__(self, file_path: str, crop_ratio=CropRatio(ratio=(3, 4)), person_percent_detection_cutoff=0.075):
         self.file_path = file_path
+        self.crop_ratio = crop_ratio
+        self.person_percent_detection_cutoff = person_percent_detection_cutoff
+
         self.image = cv2.imread(file_path)
         self.height, self.width, _ = self.image.shape
-        self.image_name_without_ext, self.image_extension = os.path.splitext(os.path.basename(file_path))
+        self.area = self.height * self.width
+        self.min_person_area = self.area * self.person_percent_detection_cutoff
+
+        self.file_name = os.path.basename(file_path)
+        self.file_name_without_ext, self.file_extension = os.path.splitext(self.file_name)
         self.person_padding_percent = 0.01
-        self.crop_ratio = crop_ratio
+
 
     def get_results(self, model_loader: ModelLoader):
         self.person_detections = self._get_person_bounding_boxes(model_loader)
@@ -44,7 +51,7 @@ class AutoCropperImage:
         # final output dimensions
         # find nearest division of 64
         output_width = output_height = 0
-        if person_height > person_width:
+        if self.crop_ratio.height_value > self.crop_ratio.width_value:
             output_height = (person_height // 64) * 64
             output_width = self.crop_ratio.width_over_height * output_height
         else:
@@ -76,11 +83,6 @@ class AutoCropperImage:
 
         final_bounding_box = (final_left, final_top, final_right, final_bottom)
 
-        print(f"original person_xyxy bounding box: {person_xyxy}")
-
-        print(f"Saving a new image with {output_width}x{output_height}")
-        print(f"final_bounding_box: {final_bounding_box}")
-
         return final_bounding_box
 
     def _get_person_bounding_boxes(self, model_loader: ModelLoader):
@@ -91,6 +93,7 @@ class AutoCropperImage:
         person_class_id = 0
         person_detections = person_detections[person_detections.class_id == person_class_id]
         person_detections = person_detections[person_detections.confidence > 0.5]
+        person_detections = person_detections[person_detections.area > self.min_person_area]
         person_detections_xyxy = [self._standardize_xyxy(xyxy) for xyxy in person_detections.xyxy]
         # apply our padding
         person_detections_xyxy = [self._apply_padding(self.person_padding_percent, xyxy) for xyxy in person_detections_xyxy]
@@ -100,7 +103,7 @@ class AutoCropperImage:
     def _get_face_bounding_boxes(self, model_loader: ModelLoader):
         result_face = model_loader.face_model(self.image)[0]
         face_detections = sv.Detections.from_ultralytics(result_face)
-        face_detections = face_detections[face_detections.confidence > 0.3]
+        face_detections = face_detections[face_detections.confidence > 0.5]
         face_detections_xyxy = [self._standardize_xyxy(xyxy) for xyxy in face_detections.xyxy]
 
         return face_detections_xyxy

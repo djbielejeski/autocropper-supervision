@@ -19,23 +19,33 @@ image_directory_loader = ImageDirectoryLoader(directory=images_directory)
 print(f"Processing {len(image_directory_loader.image_paths)} images from '{images_directory}'")
 
 for i, ac_image in enumerate(image_directory_loader.images):
-    print(f"Processing {ac_image.file_path}...")
+    print(f"Processing {ac_image.file_name}...")
 
     # run detection
     persons_with_faces = ac_image.get_results(model_loader)
+    image = ac_image.image.copy()
 
-    for person_index, person_with_face in enumerate(persons_with_faces):
-        person_xyxy, face_xyxy = person_with_face
+    for dimension in ac_image.crop_ratio.dimensions:
+        width, height = dimension
+        width_height_text = f"{width}x{height}"
 
-        # Center the image around the face detection for this item - TODO
-        person_image = sv.crop(image=ac_image.image.copy(), xyxy=person_xyxy)
+        # Save the original image
+        with sv.ImageSink(target_dir_path=os.path.join(results_folder, 'original')) as sink:
+            for person_index, person_with_face in enumerate(persons_with_faces):
+                person_xyxy, face_xyxy = person_with_face
 
-        for dimension in ac_image.crop_ratio.dimensions:
-            width, height = dimension
-            width_height_text = f"{width}x{height}"
+                person_image = sv.crop(image=image, xyxy=person_xyxy)
+                image_name = f"{ac_image.file_name_without_ext}_{person_index:02d}{ac_image.file_extension}"
+                sink.save_image(image=person_image, image_name=image_name)
 
-            with sv.ImageSink(target_dir_path=os.path.join(results_folder, width_height_text)) as sink:
-                image_name = f"{ac_image.image_name_without_ext}_{person_index:02d}_{width_height_text}{ac_image.image_extension}"
+        with sv.ImageSink(target_dir_path=os.path.join(results_folder, width_height_text)) as sink:
+
+            for person_index, person_with_face in enumerate(persons_with_faces):
+                person_xyxy, face_xyxy = person_with_face
+
+                person_image = sv.crop(image=image, xyxy=person_xyxy)
+
+                image_name = f"{ac_image.file_name_without_ext}_{person_index:02d}_{width_height_text}{ac_image.file_extension}"
                 resized_image = cv2.resize(person_image, (width, height))
                 sink.save_image(image=resized_image, image_name=image_name)
 

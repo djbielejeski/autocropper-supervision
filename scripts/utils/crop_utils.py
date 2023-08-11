@@ -1,8 +1,9 @@
 class CropRatio:
     def __init__(self, ratio=(1, 1)):
         self.ratio = ratio
-        self.width_over_height = ratio[0] / ratio[1]
-        self.height_over_width = ratio[1] / ratio[0]
+        self.width_value, self.height_value = ratio
+        self.width_over_height = self.width_value / self.height_value
+        self.height_over_width = self.height_value / self.width_value
 
         # Ratio is (Width, Height)
         if ratio == (1, 1):
