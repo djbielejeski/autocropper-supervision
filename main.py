@@ -4,9 +4,9 @@ import cv2
 import supervision as sv
 
 from scripts.utils.model_utils import ModelLoader
-from scripts.utils.file_utils import ImageDirectoryLoader
+from scripts.utils.file_utils import ImageDirectoryLoader, AutoCropperImage
 from scripts.utils.argument_parser import AutoCropperArguments, parse_arguments
-
+from scripts.utils.crop_utils import CropRatio
 
 if __name__ == "__main__":
     # Parse input arguments
@@ -20,32 +20,43 @@ if __name__ == "__main__":
 
     print(f"Processing {len(image_directory_loader.image_paths)} images from '{config.images_directory}'")
 
-    for i, ac_image in enumerate(image_directory_loader.images):
-        print(f"Processing {ac_image.file_name}...")
+    # Run the images through the models
+    results = model_loader.get_results(image_directory_loader.image_paths)
 
-        # run detection
-        persons_with_faces = ac_image.get_results(model_loader)
-        image = ac_image.image.copy()
+    # TODO: Batch these in groups of 100
+    for i, result in enumerate(results):
+        person_results, face_results = result
+        ac_image = AutoCropperImage(
+            person_results=person_results,
+            face_results=face_results,
+            crop_ratio=CropRatio(ratio=config.crop_ratio),
+            person_percent_detection_cutoff=config.person_percent_detection_cutoff,
+            person_padding_percent=config.person_padding_percent
+        )
 
+        # run our custom crop and face detection bounding box algo
+        persons_with_faces = ac_image.get_results()
+
+        # Save the original image
+        with sv.ImageSink(target_dir_path=os.path.join(config.results_folder, 'original')) as sink:
+            for person_index, person_with_face in enumerate(persons_with_faces):
+                person_xyxy, _ = person_with_face
+
+                person_image = sv.crop(image=ac_image.person_results.orig_img.copy(), xyxy=person_xyxy)
+                image_name = f"{ac_image.file_name_without_ext}_{person_index:02d}{ac_image.file_extension}"
+                sink.save_image(image=person_image, image_name=image_name)
+
+        # Save the cropped images
         for dimension in ac_image.crop_ratio.dimensions:
             width, height = dimension
             width_height_text = f"{width}x{height}"
 
-            # Save the original image
-            with sv.ImageSink(target_dir_path=os.path.join(config.results_folder, 'original')) as sink:
-                for person_index, person_with_face in enumerate(persons_with_faces):
-                    person_xyxy, face_xyxy = person_with_face
-
-                    person_image = sv.crop(image=image, xyxy=person_xyxy)
-                    image_name = f"{ac_image.file_name_without_ext}_{person_index:02d}{ac_image.file_extension}"
-                    sink.save_image(image=person_image, image_name=image_name)
-
             with sv.ImageSink(target_dir_path=os.path.join(config.results_folder, width_height_text)) as sink:
 
                 for person_index, person_with_face in enumerate(persons_with_faces):
-                    person_xyxy, face_xyxy = person_with_face
+                    person_xyxy, _ = person_with_face
 
-                    person_image = sv.crop(image=image, xyxy=person_xyxy)
+                    person_image = sv.crop(image=ac_image.person_results.orig_img.copy(), xyxy=person_xyxy)
 
                     image_name = f"{ac_image.file_name_without_ext}_{person_index:02d}_{width_height_text}{ac_image.file_extension}"
                     resized_image = cv2.resize(person_image, (width, height))

@@ -4,50 +4,44 @@ import math
 
 import supervision as sv
 
-from scripts.utils.model_utils import ModelLoader
 from scripts.utils.crop_utils import CropRatio
 
 
 class AutoCropperImage:
-    person_detections = []
-    face_detections = []
 
     def __init__(
             self,
-            file_path: str,
+            person_results,
+            face_results,
             crop_ratio=CropRatio(ratio=(3, 4)),
             person_percent_detection_cutoff=0.075,
             person_padding_percent=0.02
     ):
-        self.file_path = file_path
+        self.file_name = os.path.basename(person_results.path)
+        self.file_name_without_ext, self.file_extension = os.path.splitext(self.file_name)
+
+        self.person_results = person_results
+        self.face_results = face_results
+
         self.crop_ratio = crop_ratio
         self.person_percent_detection_cutoff = person_percent_detection_cutoff
         self.person_padding_percent = person_padding_percent
 
-        self.image = cv2.imread(file_path)
-        self.height, self.width, _ = self.image.shape
+        self.height, self.width = self.person_results.orig_shape
         self.area = self.height * self.width
         self.min_person_area = self.area * self.person_percent_detection_cutoff
 
-        self.file_name = os.path.basename(file_path)
-        self.file_name_without_ext, self.file_extension = os.path.splitext(self.file_name)
 
-    def get_results(self, model_loader: ModelLoader):
-        self.person_detections = self._get_person_bounding_boxes(model_loader)
-        self.face_detections = self._get_face_bounding_boxes(model_loader)
 
-        def sort_bounding_box(bounding_box):
-            left, top, right, bottom = bounding_box
-            area = (right - left) * (bottom - top)
-            return area
-
-        self.face_detections.sort(key=sort_bounding_box, reverse=True)
+    def get_results(self):
+        person_detections = self._get_person_bounding_boxes()
+        face_detections = self._get_face_bounding_boxes()
 
         persons_with_faces_bounding_boxes = []
 
         # For each person check to see if we have a face detected
-        for i, person in enumerate(self.person_detections):
-            for j, face in enumerate(self.face_detections):
+        for person in person_detections:
+            for face in face_detections:
                 if self._xyxy_contains(person, face):
                     centered_person = self._center(person, face)
                     persons_with_faces_bounding_boxes.append((centered_person, face))
@@ -101,9 +95,8 @@ class AutoCropperImage:
 
         return final_bounding_box
 
-    def _get_person_bounding_boxes(self, model_loader: ModelLoader):
-        result = model_loader.model(self.image)[0]
-        person_detections = sv.Detections.from_ultralytics(result)
+    def _get_person_bounding_boxes(self):
+        person_detections = sv.Detections.from_ultralytics(self.person_results)
 
         # Only grab people
         person_class_id = 0
@@ -117,11 +110,17 @@ class AutoCropperImage:
 
         return person_detections_xyxy
 
-    def _get_face_bounding_boxes(self, model_loader: ModelLoader):
-        result_face = model_loader.face_model(self.image)[0]
-        face_detections = sv.Detections.from_ultralytics(result_face)
+    def _get_face_bounding_boxes(self):
+        face_detections = sv.Detections.from_ultralytics(self.face_results)
         face_detections = face_detections[face_detections.confidence > 0.5]
         face_detections_xyxy = [self._standardize_xyxy(xyxy) for xyxy in face_detections.xyxy]
+
+        def sort_bounding_box(bounding_box):
+            left, top, right, bottom = bounding_box
+            area = (right - left) * (bottom - top)
+            return area
+
+        face_detections_xyxy.sort(key=sort_bounding_box, reverse=True)
 
         return face_detections_xyxy
 
@@ -197,5 +196,3 @@ class ImageDirectoryLoader:
 
         if len(self.image_paths) <= 0:
             raise Exception(f"No images (*.jpg, *.jpeg, *.png) found in '{directory}'.")
-
-        self.images = [AutoCropperImage(file_path=image_path) for image_path in self.image_paths]

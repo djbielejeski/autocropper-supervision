@@ -1,6 +1,8 @@
 import os
+import math
 import torch
 from ultralytics import YOLO
+import supervision as sv
 
 
 class ModelLoader:
@@ -33,3 +35,12 @@ class ModelLoader:
             load_file_from_url(model_url, model_dir=self.model_dir)
 
         return os.path.join(self.model_dir, file_name)
+
+    def get_results(self, image_paths):
+        person_results = self.model(image_paths)
+        face_results = self.face_model(image_paths)
+
+        merged_results = [(person_results[i], face_results[i]) for i in range(0, len(image_paths))]
+
+        # Return a list of tuples, one tuple per file
+        return merged_results
