@@ -12,8 +12,6 @@ if __name__ == "__main__":
     # Parse input arguments
     config: AutoCropperArguments = parse_arguments()
 
-    print(config)
-
     # Load our model
     model_loader = ModelLoader(model_name="yolov8s.pt")
 

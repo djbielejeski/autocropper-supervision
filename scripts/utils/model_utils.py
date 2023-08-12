@@ -1,4 +1,5 @@
 import os
+import torch
 from ultralytics import YOLO
 
 
@@ -8,16 +9,20 @@ class ModelLoader:
         self.model_dir = "models"
         os.makedirs(self.model_dir, exist_ok=True)
 
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
         # https://docs.ultralytics.com/models/yolov8/#supported-modes
         model_url = f"https://github.com/ultralytics/assets/releases/download/v0.0.0/{model_name}"
         file_path = self.download_model(model_url, model_name)
         self.model = YOLO(file_path)
+        self.model.to(device)
 
         # https://github.com/akanametov/yolov8-face
         face_model_name = "yolov8n-face.pt"
         face_model_url = f"https://github.com/akanametov/yolov8-face/releases/download/v0.0.0/{face_model_name}"
         face_file_path = self.download_model(face_model_url, face_model_name)
         self.face_model = YOLO(face_file_path)
+        self.face_model.to(device)
 
     def download_model(self, model_url: str, file_name: str):
         model_file_path = os.path.join(self.model_dir, file_name)
