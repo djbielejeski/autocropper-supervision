@@ -31,8 +31,6 @@ class AutoCropperImage:
         self.area = self.height * self.width
         self.min_person_area = self.area * self.person_percent_detection_cutoff
 
-
-
     def get_results(self):
         person_detections = self._get_person_bounding_boxes()
         face_detections = self._get_face_bounding_boxes()
@@ -62,9 +60,18 @@ class AutoCropperImage:
         if self.crop_ratio.height_value > self.crop_ratio.width_value:
             output_height = (person_height // 64) * 64
             output_width = self.crop_ratio.width_over_height * output_height
+
+            if output_width > person_width:
+                # If my output width is greater than our person width, we have to adjust our max sizes
+                output_width = (person_width // 64) * 64
+                output_height = output_width * self.crop_ratio.height_over_width
         else:
             output_width = (person_width // 64) * 64
             output_height = self.crop_ratio.height_over_width * output_width
+
+            if output_height > person_height:
+                output_height = (person_height // 64) * 64
+                output_width = output_width * self.crop_ratio.width_over_height
 
         # find the center of the face
         face_left, face_top, face_right, face_bottom = face_xyxy

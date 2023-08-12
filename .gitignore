@@ -164,3 +164,4 @@ cython_debug/
 # My Directories
 /results/
 /models/
+/unsplash-images-results/
